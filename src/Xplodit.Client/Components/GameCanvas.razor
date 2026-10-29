@@ -1,0 +1,369 @@
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+@inject ProfileService Profile
+
+<div class="play-shell">
+    <aside class="hud">
+        <div class="hud-brand">XPLODIT</div>
+        <div class="hud-mode">
+            <span>@GameModeInfo.Icon(Settings.Mode) @GameModeInfo.Name(Settings.Mode)</span>
+            <span>@Map.Name</span>
+        </div>
+
+        @if (_session is not null)
+        {
+            <div class="hud-round">
+                <div><span>Rodada</span><strong>@_session.Round/@_session.Settings.Rounds</strong></div>
+                <div class="@(_session.TimeRemaining <= 15 ? "hud-timer-warn" : null)">
+                    <span>@(_session.IsShrinking ? "Morte súbita" : "Tempo")</span>
+                    <strong>@FormatTime(_session.TimeRemaining)</strong>
+                </div>
+            </div>
+
+            <div class="hud-players">
+                @foreach (var a in _session.Actors)
+                {
+                    <div class="player-card @(a.IsAlive || a.IsRespawning ? null : "out")" style="--pc:@a.Color">
+                        <div class="player-head">
+                            <canvas id="@($"{_canvasId}-p{a.Id}")" class="player-portrait" width="44" height="44"></canvas>
+                            <strong>@a.Name</strong>
+                            <span class="player-wins">@(Trophies(a.RoundWins))</span>
+                        </div>
+                        <div class="player-line">
+                            @if (Settings.RespawnsOnDeath)
+                            {
+                                <span>⭐ @a.Stars/@MatchSettings.StarGoal</span>
+                            }
+                            else
+                            {
+                                <span>@(a.Lives > 0 ? new string('♥', a.Lives) : "✖")</span>
+                            }
+                            @if (Settings.Mode == GameMode.CoinRush)
+                            {
+                                <span>🪙 @a.Coins</span>
+                            }
+                            <span class="player-score">@LiveScore(a)</span>
+                        </div>
+                        <div class="player-stats">
+                            <span title="Bombas">💣@a.MaxBombs</span>
+                            <span title="Alcance">🔥@a.BlastRange</span>
+                            <span title="Velocidade">👟@a.SpeedLevel</span>
+                            @if (a.CanKick) { <span title="Chute">🦶</span> }
+                            @if (a.HasShield) { <span title="Escudo">🛡️</span> }
+                            @if (a.HasPierce) { <span title="Perfurante">💥</span> }
+                            @if (a.HasGlove) { <span title="Luva">🧤</span> }
+                            @if (a.HasRemote) { <span title="Detonador">📡</span> }
+                            @if (a.IsGhost) { <span title="Fantasma">👻</span> }
+                            @if (a.Curse != CurseType.None) { <span title="Maldição">💀</span> }
+                            <span class="player-paint" title="Casas pintadas">🎨@a.PaintedTiles</span>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="hud-missions">
+                <span class="hud-label">Missões</span>
+                @foreach (var m in _missions)
+                {
+                    <div>⭐ @m.Description</div>
+                }
+            </div>
+
+            @if (_session.HumansOut && _session.Phase == MatchPhase.Playing)
+            {
+                <div class="hud-banner">Você caiu! Acelerando ⏩</div>
+            }
+        }
+
+        <p class="hud-help">@(Settings.HumanPlayers == 2 ? "J1: WASD + Espaço (detonar: Q) · J2: Setas + Enter (detonar: L)" : "Setas/WASD + Espaço · Q ou Shift detona") · Esc pausa</p>
+    </aside>
+
+    <div class="canvas-wrap">
+        <canvas id="@_canvasId" class="game-canvas" tabindex="0"></canvas>
+
+        @if (_session is { IsPaused: true })
+        {
+            <div class="end-overlay">
+                <h2>Pausado</h2>
+                <div class="cta-row">
+                    <button class="btn btn-primary" @onclick="Resume">Continuar</button>
+                    <button class="btn btn-ghost" @onclick="Exit">Sair para o menu</button>
+                </div>
+            </div>
+        }
+        else if (_session?.Phase == MatchPhase.RoundOver)
+        {
+            var winner = _session.Actors.FirstOrDefault(a => a.Id == _session.RoundWinnerId);
+            <div class="end-overlay round-overlay">
+                <h2 style="color:@(winner?.Color ?? "#f0e6d2")">@(winner is null ? "Empate!" : $"{winner.Name} venceu a rodada!")</h2>
+                <div class="round-table">
+                    @foreach (var a in _session.Standings)
+                    {
+                        <div style="--pc:@a.Color"><span class="player-dot"></span>@a.Name <strong>@(Trophies(a.RoundWins))</strong><em>@a.MatchScore pts</em></div>
+                    }
+                </div>
+                <p class="overlay-hint">Espaço ou Enter para a próxima rodada</p>
+            </div>
+        }
+        else if (_session?.Phase == MatchPhase.MatchOver)
+        {
+            var champion = _session.Standings[0];
+            <div class="end-overlay @(champion.IsHuman ? null : "defeat")">
+                <h2>@(champion.IsHuman ? (Settings.HumanPlayers == 1 ? "Você venceu!" : $"{champion.Name} venceu!") : "Você perdeu!")</h2>
+                <p>Campeão: <strong style="color:@champion.Color">@champion.Name</strong> · @champion.RoundWins rodada(s) · @champion.MatchScore pts</p>
+                <div class="round-table">
+                    @foreach (var a in _session.Standings)
+                    {
+                        <div style="--pc:@a.Color"><span class="player-dot"></span>@a.Name <strong>@(Trophies(a.RoundWins))</strong><em>@a.MatchScore pts</em></div>
+                    }
+                </div>
+                <div class="mission-results">
+                    @foreach (var r in _missionResults)
+                    {
+                        <div class="@(r.Completed ? "done" : null)">@(r.Completed ? "✔" : "✖") @r.Mission.Description <em>+@r.Mission.Reward</em></div>
+                    }
+                </div>
+                <p class="reward-line">🪙 +@_pointsEarned pontos · ⭐ +@_missionResults.Count(r => r.Completed) estrela(s)</p>
+                <div class="cta-row">
+                    <button class="btn btn-primary" @onclick="Rematch">Jogar de novo</button>
+                    <button class="btn btn-ghost" @onclick="Exit">Menu</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public MapDefinition Map { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public MatchSettings Settings { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public CharacterLoadout[] Loadouts { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnExit { get; set; }
+
+    [Parameter]
+    public EventCallback OnRematch { get; set; }
+
+    private readonly string _canvasId = $"xplodit-canvas-{Guid.NewGuid():N}";
+    private readonly GameInput _input = new();
+    private GameSession? _session;
+    private DotNetObjectReference<GameCanvas>? _self;
+    private IReadOnlyList<Mission> _missions = [];
+    private IReadOnlyList<MissionResult> _missionResults = [];
+    private int _pointsEarned;
+    private bool _started;
+    private bool _rewarded;
+    private bool _pendingPause;
+    private float _hudClock;
+    private MatchPhase _lastPhase;
+    private bool _lastPaused;
+
+    protected override void OnInitialized()
+    {
+        _session = new GameSession(Map, Settings, Loadouts);
+        _missions = MissionCatalog.Draw(_session.Settings.Mode, _session.Settings.Monsters, new Random());
+        _lastPhase = _session.Phase;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await Profile.EnsureLoadedAsync();
+        _self = DotNetObjectReference.Create(this);
+        var options = new { width = Map.Width, height = Map.Height, themeId = Map.ThemeId };
+        await Js.InvokeVoidAsync("xploditCanvas.start", _canvasId, _self, options, Settings.HumanPlayers);
+        foreach (var a in _session!.Actors)
+        {
+            await Js.InvokeVoidAsync("xploditPortrait.draw", $"{_canvasId}-p{a.Id}", LoadoutJs.From(a.Loadout));
+        }
+
+        _started = true;
+    }
+
+    [JSInvokable]
+    public async Task Tick(float dt, CanvasInputDto input)
+    {
+        if (_session is null || !_started)
+        {
+            return;
+        }
+
+        _input.Players[0].MoveDirection = (Direction)input.P1Move;
+        _input.Players[0].PlaceBomb |= input.P1Bomb;
+        _input.Players[0].Detonate |= input.P1Det;
+        _input.Players[1].Detonate |= input.P2Det;
+        _input.Players[1].MoveDirection = (Direction)input.P2Move;
+        _input.Players[1].PlaceBomb |= input.P2Bomb;
+        _input.Confirm |= input.Confirm;
+        _input.TogglePause |= input.TogglePause || _pendingPause;
+        _pendingPause = false;
+
+        // Once every local player is out, fast-forward the bots so nobody has to wait.
+        var steps = _session.Phase == MatchPhase.Playing && _session.HumansOut ? 3 : 1;
+        for (var i = 0; i < steps; i++)
+        {
+            _session.Update(dt, _input);
+        }
+
+        if (_session.Phase == MatchPhase.MatchOver && !_rewarded)
+        {
+            await RewardAsync();
+        }
+
+        _hudClock += dt;
+        if (_hudClock >= 0.25f || _session.Phase != _lastPhase || _session.IsPaused != _lastPaused)
+        {
+            _hudClock = 0f;
+            _lastPhase = _session.Phase;
+            _lastPaused = _session.IsPaused;
+            StateHasChanged();
+        }
+
+        await Js.InvokeVoidAsync("xploditCanvas.draw", BuildSnapshot(_session));
+    }
+
+    private async Task RewardAsync()
+    {
+        _rewarded = true;
+        var session = _session!;
+        _missionResults = MissionCatalog.Evaluate(_missions, session);
+        var bestHuman = session.Humans.OrderByDescending(h => h.MatchScore).First();
+        var won = session.Standings[0].IsHuman;
+        _pointsEarned = bestHuman.MatchScore / 20
+                        + _missionResults.Where(r => r.Completed).Sum(r => r.Mission.Reward)
+                        + (won ? 100 : 0);
+        await Profile.RecordMatchAsync(_pointsEarned, _missionResults.Count(r => r.Completed), won, bestHuman.MatchScore);
+    }
+
+    private object BuildSnapshot(GameSession session)
+    {
+        var map = session.Map;
+        var count = map.Width * map.Height;
+        var tiles = new byte[count];
+        var ice = new byte[count];
+        var paint = new byte[count];
+        for (var y = 0; y < map.Height; y++)
+        {
+            for (var x = 0; x < map.Width; x++)
+            {
+                var i = y * map.Width + x;
+                tiles[i] = (byte)map.Get(x, y);
+                ice[i] = map.IsIce(x, y) ? (byte)1 : (byte)0;
+                paint[i] = (byte)(map.GetPaint(x, y) + 1);
+            }
+        }
+
+        return new
+        {
+            width = map.Width,
+            height = map.Height,
+            themeId = map.ThemeId,
+            floorColor = map.FloorColor,
+            wallColor = map.WallColor,
+            softColor = map.SoftBlockColor,
+            tiles,
+            ice,
+            paint,
+            paintColors = session.Actors.Select(a => a.Color).ToArray(),
+            phase = (int)session.Phase,
+            phaseTimer = session.PhaseTimer,
+            paused = session.IsPaused,
+            shrinking = session.IsShrinking,
+            round = session.Round,
+            winnerId = session.Phase is MatchPhase.RoundOver or MatchPhase.MatchOver ? session.RoundWinnerId ?? -1 : -1,
+            bombs = session.Bombs.Select(b =>
+            {
+                var owner = session.Actors.FirstOrDefault(a => a.Id == b.OwnerId);
+                return new
+                {
+                    id = b.Id,
+                    x = b.DisplayX,
+                    y = b.DisplayY,
+                    h = b.FlyHeight,
+                    fuse = b.Remote ? Math.Min(b.FuseRemaining, 2.4f) : b.FuseRemaining,
+                    remote = b.Remote,
+                    freeze = b.Freeze,
+                    pierce = b.Pierce,
+                    skin = owner?.Loadout.BombSkin ?? "classic",
+                    color = owner?.Color ?? "#ff4d00"
+                };
+            }).ToArray(),
+            explosions = session.Explosions.Select(e => new { x = e.X, y = e.Y, t = e.TimeRemaining / ExplosionCell.Duration, shape = e.Shape, freeze = e.Freeze }).ToArray(),
+            powerUps = session.PowerUps.Select(p => new { x = p.X, y = p.Y, type = (int)p.Type }).ToArray(),
+            items = session.Collectibles.Select(c => new { x = c.X, y = c.Y, kind = (int)c.Kind, delay = c.PickupDelay }).ToArray(),
+            monsters = session.Monsters.Where(m => m.IsAlive).Select(m => new { x = m.DisplayX, y = m.DisplayY, facing = (int)m.Facing, id = m.Id, moving = m.IsMoving }).ToArray(),
+            actors = session.Actors.Where(a => a.IsAlive).Select(a => new
+            {
+                id = a.Id,
+                x = a.DisplayX,
+                y = a.DisplayY,
+                facing = (int)a.Facing,
+                moving = a.IsMoving,
+                isHuman = a.IsHuman,
+                name = a.Name,
+                color = a.Color,
+                frozen = a.IsFrozen,
+                invuln = a.IsInvulnerable,
+                ghost = a.IsGhost,
+                shield = a.HasShield,
+                curse = (int)a.Curse,
+                speed = a.SpeedLevel,
+                glove = a.HasGlove,
+                look = LoadoutJs.From(a.Loadout)
+            }).ToArray(),
+            events = session.DrainEvents().Select(e => new { kind = e.Kind, x = e.X, y = e.Y, text = e.Text, color = e.Color }).ToArray()
+        };
+    }
+
+    /// <summary>Round points are folded into MatchScore when the round ends, so only add them while it runs.</summary>
+    private int LiveScore(Actor a) =>
+        a.MatchScore + (_session?.Phase is MatchPhase.Playing or MatchPhase.Countdown ? a.Score : 0);
+
+    private static string Trophies(int n) => string.Concat(Enumerable.Repeat("🏆", n));
+
+    private static string FormatTime(float seconds)
+    {
+        var s = Math.Max(0, (int)Math.Ceiling(seconds));
+        return $"{s / 60}:{s % 60:00}";
+    }
+
+    private void Resume() => _pendingPause = true;
+
+    private async Task Exit() => await OnExit.InvokeAsync();
+
+    private async Task Rematch() => await OnRematch.InvokeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("xploditCanvas.stop", _canvasId);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+
+    public sealed class CanvasInputDto
+    {
+        public int P1Move { get; set; }
+        public bool P1Bomb { get; set; }
+        public int P2Move { get; set; }
+        public bool P2Bomb { get; set; }
+        public bool P1Det { get; set; }
+        public bool P2Det { get; set; }
+        public bool TogglePause { get; set; }
+        public bool Confirm { get; set; }
+    }
+}

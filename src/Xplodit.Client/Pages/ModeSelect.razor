@@ -1,0 +1,112 @@
+@page "/modo"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject GameSetupState Setup
+@inject NavigationManager Nav
+
+<PageTitle>Modo — Xplodit</PageTitle>
+
+<section class="screen select-screen">
+    <header class="screen-header">
+        <p class="brand-mark brand-mark-sm">XPLODIT</p>
+        <h1>Escolher modo</h1>
+        <p>Escolha como a partida vai ser e ajuste jogadores, rivais e dificuldade.</p>
+    </header>
+
+    <div class="mode-grid">
+        @foreach (var mode in Enum.GetValues<GameMode>())
+        {
+            <button type="button" class="mode-card @(S.Mode == mode ? "active" : null)" @onclick="() => SelectMode(mode)">
+                <span class="mode-icon">@GameModeInfo.Icon(mode)</span>
+                <h2>@GameModeInfo.Name(mode)</h2>
+                <p>@GameModeInfo.Description(mode)</p>
+            </button>
+        }
+    </div>
+
+    <div class="settings-panel">
+        <div class="setting">
+            <label>Jogadores (teclado)</label>
+            <div class="chip-row">
+                @for (var i = 1; i <= 2; i++)
+                {
+                    var n = i;
+                    <button type="button" class="chip @(S.HumanPlayers == n ? "active" : null)" @onclick="() => SetHumans(n)">@n</button>
+                }
+            </div>
+        </div>
+        <div class="setting">
+            <label>Rivais da CPU</label>
+            <div class="chip-row">
+                @for (var i = 0; i <= MatchSettings.MaxActors - S.HumanPlayers; i++)
+                {
+                    var n = i;
+                    var disabled = S.HumanPlayers + n < 2;
+                    <button type="button" class="chip @(S.Bots == n ? "active" : null)" disabled="@disabled" @onclick="() => S.Bots = n">@n</button>
+                }
+            </div>
+        </div>
+        <div class="setting">
+            <label>Monstros</label>
+            <div class="chip-row">
+                @foreach (var n in new[] { 0, 1, 2, 4, 6 })
+                {
+                    var value = n;
+                    <button type="button" class="chip @(S.Monsters == value ? "active" : null)" @onclick="() => S.Monsters = value">@value</button>
+                }
+            </div>
+        </div>
+        <div class="setting">
+            <label>Rodadas</label>
+            <div class="chip-row">
+                @foreach (var n in new[] { 1, 3, 5 })
+                {
+                    var value = n;
+                    <button type="button" class="chip @(S.Rounds == value ? "active" : null)" @onclick="() => S.Rounds = value">@(value == 1 ? "1" : $"Melhor de {value}")</button>
+                }
+            </div>
+        </div>
+        <div class="setting">
+            <label>Dificuldade</label>
+            <div class="chip-row">
+                @foreach (var d in Enum.GetValues<Difficulty>())
+                {
+                    var value = d;
+                    <button type="button" class="chip @(S.Difficulty == value ? "active" : null)" @onclick="() => S.Difficulty = value">@GameModeInfo.DifficultyName(value)</button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (S.HumanPlayers == 2)
+    {
+        <p class="controls-note">🎮 Jogador 1: <kbd>W A S D</kbd> + <kbd>Espaço</kbd> (detonar <kbd>Q</kbd>) · Jogador 2: <kbd>Setas</kbd> + <kbd>Enter</kbd> (detonar <kbd>L</kbd>)</p>
+    }
+    @if (S.Mode == GameMode.CoinRush && S.Monsters < 4)
+    {
+        <p class="controls-note">👾 O Comilão sempre tem pelo menos 4 monstros.</p>
+    }
+
+    <footer class="screen-footer">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/")'>Voltar</button>
+        <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/personagem")'>Continuar</button>
+    </footer>
+</section>
+
+@code {
+    private MatchSettings S => Setup.Settings;
+
+    private void SelectMode(GameMode mode)
+    {
+        S.Mode = mode;
+        if (mode == GameMode.CoinRush && S.Monsters < 4)
+        {
+            S.Monsters = 4;
+        }
+    }
+
+    private void SetHumans(int n)
+    {
+        S.HumanPlayers = n;
+        S.Normalize();
+    }
+}

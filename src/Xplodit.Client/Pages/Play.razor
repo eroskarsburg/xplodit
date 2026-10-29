@@ -1,0 +1,38 @@
+@page "/partida"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject GameSetupState Setup
+@inject NavigationManager Nav
+
+<PageTitle>Partida — Xplodit</PageTitle>
+
+@if (Setup.SelectedMap is null)
+{
+    <section class="screen select-screen">
+        <header class="screen-header">
+            <h1>Arena não selecionada</h1>
+            <p>Escolha uma arena antes de iniciar.</p>
+        </header>
+        <footer class="screen-footer">
+            <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/mapa")'>Escolher arena</button>
+        </footer>
+    </section>
+}
+else
+{
+    <section class="screen play-screen">
+        <GameCanvas @key="_matchKey" Map="Setup.SelectedMap" Settings="Setup.Settings"
+                    Loadouts="Setup.Loadouts" OnExit="ExitToMenu" OnRematch="Rematch" />
+    </section>
+}
+
+@code {
+    private int _matchKey;
+
+    private void Rematch() => _matchKey++;
+
+    private void ExitToMenu()
+    {
+        Setup.ResetMatchSelection();
+        Nav.NavigateTo("/");
+    }
+}

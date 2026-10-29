@@ -1,0 +1,57 @@
+@page "/"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject NavigationManager Nav
+@inject ProfileService Profile
+@inject GameSetupState Setup
+@inject IJSRuntime Js
+
+<PageTitle>Xplodit</PageTitle>
+
+<section class="screen home-screen">
+    <div class="home-atmosphere" aria-hidden="true"></div>
+    <div class="home-content">
+        <div class="home-hero">
+            <p class="brand-mark" aria-label="XPLODIT">
+                @foreach (var letter in "XPLODIT")
+                {
+                    <span class="logo-letter" aria-hidden="true">@letter</span>
+                }
+            </p>
+            <canvas id="home-hero" width="180" height="210" aria-hidden="true"></canvas>
+        </div>
+        <h1 class="home-tagline">Plante. Exploda. Domine!</h1>
+        <p class="home-lead">Cinco modos explosivos, arenas gigantes, até 2 jogadores no mesmo teclado, rivais da CPU, monstros e uma loja com mais de 120 itens para deixar seu bombardeiro do seu jeito.</p>
+        <div class="cta-row">
+            <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/modo")'>Jogar!</button>
+            <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/personagem")'>Visual &amp; Loja</button>
+        </div>
+
+        <div class="profile-strip">
+            <div><span>🪙 Pontos</span><strong>@Profile.Data.Points</strong></div>
+            <div><span>⭐ Estrelas</span><strong>@Profile.Data.Stars</strong></div>
+            <div><span>🏆 Vitórias</span><strong>@Profile.Data.MatchesWon / @Profile.Data.MatchesPlayed</strong></div>
+            <div><span>🎁 Itens</span><strong>@Profile.UnlockedCount / @CosmeticCatalog.All.Count</strong></div>
+        </div>
+
+        <p class="home-hint">1 jogador: setas ou WASD + Espaço (Q detona) · 2 jogadores: WASD + Espaço / setas + Enter · Esc pausa · M som</p>
+    </div>
+</section>
+
+@code {
+    private int _dance;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Profile.EnsureLoadedAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dance++;
+        }
+
+        await Js.InvokeVoidAsync("xploditPreview.draw", "home-hero", LoadoutJs.From(Setup.Loadouts[0]), CharacterCatalog.SlotColors[0], 2, _dance);
+    }
+}

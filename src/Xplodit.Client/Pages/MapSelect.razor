@@ -1,0 +1,82 @@
+@page "/mapa"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject GameSetupState Setup
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+
+<PageTitle>Arena — Xplodit</PageTitle>
+
+<section class="screen select-screen">
+    <header class="screen-header">
+        <p class="brand-mark brand-mark-sm">XPLODIT</p>
+        <h1>Escolher arena</h1>
+        <p>@GameModeInfo.Icon(Setup.Settings.Mode) @GameModeInfo.Name(Setup.Settings.Mode) · @Setup.Settings.HumanPlayers jogador(es) + @Setup.Settings.Bots CPU · O layout muda a cada rodada.</p>
+    </header>
+
+    <div class="map-grid">
+        @foreach (var map in MapCatalog.All)
+        {
+            var selected = Setup.SelectedMapId == map.Id;
+            <button type="button" class="map-card @(selected ? "active" : null)" @onclick="() => Setup.SelectedMapId = map.Id">
+                <canvas id="map-thumb-@map.Id" class="map-thumb-canvas" width="250" height="190"></canvas>
+                <h2>@map.Name</h2>
+                <p>@map.Description</p>
+            </button>
+        }
+    </div>
+
+    <footer class="screen-footer">
+        <button class="btn btn-ghost" @onclick='() => Nav.NavigateTo("/personagem")'>Voltar</button>
+        <button class="btn btn-primary" disabled="@(!Setup.IsReady)" @onclick="Start">Iniciar partida</button>
+    </footer>
+</section>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Setup.SelectedMapId ??= MapCatalog.All[0].Id;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        foreach (var map in MapCatalog.All)
+        {
+            var (rows, ice) = MapGenerator.Generate(map, new Random(map.Id.Length * 97), map.SoftChance, map.IceChance);
+            var tiles = new List<int>();
+            var iceCells = new List<int>();
+            for (var y = 0; y < map.Height; y++)
+            {
+                for (var x = 0; x < map.Width; x++)
+                {
+                    tiles.Add(rows[y][x] switch { '#' => 1, 'B' => 2, _ => 0 });
+                    iceCells.Add(ice[x, y] ? 1 : 0);
+                }
+            }
+
+            await Js.InvokeVoidAsync("xploditMapPreview.draw", $"map-thumb-{map.Id}", new
+            {
+                width = map.Width,
+                height = map.Height,
+                themeId = map.ThemeId,
+                floorColor = map.FloorColor,
+                wallColor = map.WallColor,
+                softColor = map.SoftBlockColor,
+                tiles,
+                ice = iceCells
+            });
+        }
+    }
+
+    private void Start()
+    {
+        if (Setup.IsReady)
+        {
+            Nav.NavigateTo("/partida");
+        }
+    }
+}

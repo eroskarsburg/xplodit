@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Xplodit.Client/Xplodit.Client.csproj" />
+    <Project Path="src/Xplodit.Game/Xplodit.Game.csproj" />
+    <Project Path="src/Xplodit/Xplodit.csproj" />
+  </Folder>
+</Solution>
