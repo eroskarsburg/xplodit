@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore Xplodit.slnx
+      - run: dotnet build Xplodit.slnx --no-restore --configuration Release
+      # O projeto ainda não tem projeto de testes; este passo passa a validar
+      # automaticamente assim que um for adicionado à solução.
+      - run: dotnet test Xplodit.slnx --no-build --configuration Release
