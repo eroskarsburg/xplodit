@@ -756,6 +756,7 @@ public sealed class GameSession
             bomb.Y = bomb.FlyToY;
             if (CanBombEnter(bomb.X, bomb.Y, bomb.Id))
             {
+                bomb.IsFlying = false;
                 bomb.SyncDisplayToCell();
                 bomb.FlyHeight = 0f;
                 Emit("land", bomb.X, bomb.Y);
