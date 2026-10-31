@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Xplodit.Game.Tests" />
+  </ItemGroup>
+
 </Project>

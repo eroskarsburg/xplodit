@@ -4,4 +4,7 @@
     <Project Path="src/Xplodit.Game/Xplodit.Game.csproj" />
     <Project Path="src/Xplodit/Xplodit.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Xplodit.Game.Tests/Xplodit.Game.Tests.csproj" />
+  </Folder>
 </Solution>

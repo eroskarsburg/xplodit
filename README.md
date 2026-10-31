@@ -56,7 +56,7 @@ dotnet build Xplodit.slnx
 dotnet test Xplodit.slnx
 ```
 
-> O projeto ainda não tem um projeto de testes automatizados. Por enquanto, o CI garante que a solução compila.
+Os testes ficam em `tests/Xplodit.Game.Tests` (xUnit) e cobrem o motor: partidas completas simuladas em todos os modos, arenas e dificuldades, comportamento dos bots, Luva e Detonador, catálogo da loja e geração de mapas.
 
 ## Estrutura do projeto
 
@@ -66,6 +66,8 @@ src/
 │   └── wwwroot/js/   # cartoon.js (desenhos), gameCanvas.js (loop/efeitos), intro.js (abertura)
 ├── Xplodit.Client/   # Páginas e componentes Blazor WebAssembly (menu, loja, partida)
 └── Xplodit.Game/     # Motor do jogo em C# puro: sessão, mapas, bots, missões, cosméticos
+tests/
+└── Xplodit.Game.Tests/ # Testes xUnit do motor
 ```
 
 ## Contribuindo
